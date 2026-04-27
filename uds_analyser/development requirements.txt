@@ -1,0 +1,127 @@
+Here are the best YouTube resources organised by topic to help you build this tool yourself.
+
+---
+
+## 🔧 CAN Bus & Automotive Diagnostics Foundations
+
+**CAN Bus Explained**
+- *"CAN Bus Explained - A Simple Intro"* by **CSS Electronics** — Best intro to CAN physical layer, arbitration, frame structure. Their whole playlist is gold.
+- *"Controller Area Network (CAN Bus) | Lecture"* by **NPTEL / IIT** — Academic depth on CAN protocol
+
+**UDS Protocol (ISO 14229)**
+- *"UDS Protocol Explained"* by **CSS Electronics** — Covers DiagnosticSessionControl, SecurityAccess, ReadDataByIdentifier clearly
+- *"UDS - Unified Diagnostic Services"* by **Embedded Garage** — Walks through 0x10, 0x27, 0x34, 0x36 with real captures
+- *"UDS Protocol Tutorial"* by **Vector Informatik** — Official Vector channel, very accurate
+
+**ISO-TP / ISO 15765**
+- *"ISO-TP Protocol Explained"* by **CSS Electronics** — Single Frame, First Frame, Consecutive Frame, Flow Control with Wireshark-style view
+- *"CAN Transport Protocol (ISO 15765-2)"* by **Embedded Garage**
+
+**J1939 (29-bit extended IDs)**
+- *"J1939 CAN Bus Explained"* by **CSS Electronics** — PGN structure, 29-bit addressing, SA/DA — directly relevant to your Albonair log
+- *"SAE J1939 Tutorial"* by **PEAK System** — Practical with PCAN tools
+
+---
+
+## 🐍 Python Programming
+
+**PyQt6 GUI Development**
+- *"Python GUI Development with PyQt6"* by **Tech With Tim** — Full playlist, covers QMainWindow, QTabWidget, QTableWidget, signals/slots
+- *"PyQt6 Full Course"* by **freeCodeCamp.org** — 4-hour comprehensive tutorial
+- *"PyQt6 Drag and Drop"* — search this specific topic for the drag-drop log loading feature
+
+**ReportLab PDF Generation**
+- *"Generate PDF with Python - ReportLab"* by **NeuralNine** — Covers Platypus, Tables, Paragraphs, TableStyle — exactly what the RCA report uses
+- *"Python PDF Generation Tutorial"* by **Tech With Tim**
+
+**Python Data Structures & Parsing**
+- *"Python Bytes and Binary Data"* by **Corey Schafer** — Essential for parsing hex CAN data bytes
+- *"Python Regular Expressions"* by **Corey Schafer** — Used extensively in the log parser
+
+**Threading in Python/PyQt**
+- *"PyQt5 Threading - QThread"* by **Tech With Tim** — Same concept as QThread used for AnalysisWorker in the tool
+
+---
+
+## 🛠️ CAN Tools & BusMaster
+
+**BusMaster Tutorials**
+- Search *"BusMaster CAN Tool Tutorial"* on YouTube — RBEI (Robert Bosch Engineering India) has official walkthrough videos
+- *"BusMaster 3.x Logging"* — Shows exact log format your tool reads
+- *"BusMaster Node Simulation"* — Relevant for understanding the .log file structure
+
+**Vector CANalyzer / CANoe**
+- *"Vector CANoe UDS Simulation"* by **Vector Informatik** — Shows ASC log format and how UDS sessions look in real captures
+- *"CANalyzer Basics"* by **Vector Informatik**
+
+---
+
+## 📊 Automotive Flashing (ECU Programming)
+
+**ECU Flash Sequence**
+- *"ECU Reprogramming / Flashing Overview"* by **Vector Informatik** — Covers the complete 0x28 → 0x85 → 0x27 → 0x31 → 0x34 → 0x36 → 0x37 sequence
+- *"UDS Flash Programming"* by **Embitel Technologies** — Step-by-step bootloader sequence matching exactly what this tool analyses
+- *"AUTOSAR DCM Module"* — Explains the ECU-side UDS stack, helps understand why NRCs like 0x22 / 0x78 happen
+
+**Security Access / Seed-Key**
+- *"UDS Security Access Algorithm"* — Search this; several automotive YouTubers explain seed-key XOR algorithms
+- *"CAN Bus Hacking"* by **Hack The Planet** — Covers SecurityAccess from a reverse-engineering angle
+
+---
+
+## 🗺️ Recommended Learning Path
+
+```
+Week 1  →  CSS Electronics: CAN Bus + ISO-TP playlists
+Week 2  →  Embedded Garage: UDS Protocol series
+Week 3  →  Tech With Tim: PyQt6 Full Course
+Week 4  →  NeuralNine: ReportLab PDF + Python binary parsing
+Week 5  →  Vector: ECU Reprogramming + CANoe ASC log format
+Week 6  →  Build the parser first, then the GUI, then the PDF
+```
+
+---
+
+## 📚 Bonus — Written References Alongside Videos
+
+These aren't YouTube but complement the videos directly:
+
+- **CSS Electronics blog** — `csselectronics.com` has written versions of all their videos with downloadable examples
+- **ISO 14229-1** standard — The UDS bible; buy or access via your company
+- **python-can documentation** — `python-can.readthedocs.io`
+- **ReportLab User Guide PDF** — Free download from reportlab.com
+
+The CSS Electronics channel is the single best starting point — if you watch only one channel, make it theirs. Their CAN + ISO-TP + UDS trilogy gives you the full foundation needed to understand every part of this tool.
+
+
+
+update:
+`CYAN` is missing from the class. Let me add it and fix all `self.CYAN` references:All tests pass. Now deliver the final file:Here is exactly what was fixed and the full list of all issues resolved.
+
+---
+
+## All Bugs Fixed — Root Cause Summary
+
+### Bug 1 — Duplicate pair causing double count (primary bug)
+`detect_uds_pairs()` was returning **both** `(0x18DA3DF1, 0x18DAF13D)` **and** `(0x18DAF13D, 0x18DA3DF1)` — the same pair reversed. The reassembler ran twice over the identical frames, so 19 frames became 38 (or more). The dedup set used `payload[:8]` as key which was insufficient for multi-frame messages where the first 8 bytes are the same across blocks. **Fix:** dedup key is now `(round(ts, 4), bytes(full_payload))` — full payload hash — and `detect_uds_pairs()` now normalises every pair to `(min, max)` before inserting into the seen-set, so `(A,B)` and `(B,A)` are treated as the same pair.
+
+### Bug 2 — Non-UDS SIDs passing through the decoder
+After ISO-TP reassembly, `decode_uds_frames()` was accepting **any** payload, including Consecutive Frame sequences that came from non-UDS multi-frame traffic. If a J1939 periodic message happened to start a CF sequence (e.g. first byte `0x21`), it would be decoded as "UDS". **Fix:** Added an explicit SID whitelist check **before** calling `decode_uds_frames()`. Every reassembled payload is now validated:
+- If `payload[0] == 0x7F` → the failing SID at `payload[1]` must be in `UDS_ALL_SIDS`
+- Otherwise → `payload[0] & 0xBF` must be in `UDS_ALL_SIDS`
+- Any payload that fails these checks is silently discarded — it is not a UDS frame
+
+### Bug 3 — `self.CYAN` / `self.PURPLE` missing from PDF class
+The new PDF sections (`_ecu_identity`, `_bus_load_analysis`) referenced `self.CYAN` and `self.PURPLE` but `PDFReportGenerator` only defined colours up to `TEAL`. **Fix:** Added `CYAN = colors.HexColor("#0097a7")` and `PURPLE = colors.HexColor("#7b1fa2")` to the class.
+
+---
+
+## Verified Results with Your Exact Log Format
+
+| Metric | Result |
+|---|---|
+| CAN frames parsed | 29 |
+| Non-UDS periodic frames (0xC00003D, 0x18FF463D, etc.) | Correctly **excluded** |
+| UDS frames counted | **19 — exact match** with Notepad++ search |
+| False positives (non-UDS SID) | **0** |
+| PDF sections generated | 11 (cover, summary, sequence, issues, findings, C/PA, ladder, latency, SA deep, ECU identity, bus load) |

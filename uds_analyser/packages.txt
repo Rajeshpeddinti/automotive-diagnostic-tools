@@ -1,0 +1,4 @@
+pip install PyQt6 reportlab
+python uds_flash_analyzer.py              # normal launch
+python uds_flash_analyzer.py --demo       # auto-loads a demo log with deliberate issues
+python uds_flash_analyzer.py my_log.asc  # open a specific log file
